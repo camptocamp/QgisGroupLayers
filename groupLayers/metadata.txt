@@ -1,0 +1,10 @@
+[general]
+name=groupLayers
+experimental=False
+description=Group Layers by Type
+version=0.1
+releasedate=2020-04-09
+qgisMinimumVersion=3.0
+author=Moritz KIRMSE
+email=moritz.kirmse@camptocamp.com
+icon=icon.png
