@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QDockWidget, QToolBar
 from qgis.PyQt.QtGui import QIcon
 from qgis.core import QgsLayerTree, QgsLayerTreeGroup, QgsLayerTreeLayer
 from.groupTypes import groupHierarchy
@@ -29,13 +29,18 @@ class MainPlugin(object):
         self.grouped = False
 
         # add toolbar button and menu item
-        self.iface.addToolBarIcon(self.action)
+        layersDock = self.iface.mainWindow().findChild(QDockWidget, "Layers")
+        self.layersToolBar = layersDock.widget().layout().itemAt(0).widget()
+        assert isinstance(self.layersToolBar, QToolBar)
+        self.layersToolBar.addAction(self.action)
+        # self.iface.addToolBarIcon(self.action)
         self.iface.addPluginToMenu("&Group Layers", self.action)
 
     def unload(self):
         # remove the plugin menu item and icon
         self.iface.removePluginMenu("&Group Layers", self.action)
-        self.iface.removeToolBarIcon(self.action)
+        self.layersToolBar.removeAction(self.action)
+        # self.iface.removeToolBarIcon(self.action)
 
     def run(self):
         # create and show a configuration dialog or something similar
