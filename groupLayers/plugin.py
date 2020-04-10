@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
+from collections import defaultdict
 from qgis.PyQt.QtWidgets import QAction
 from qgis.PyQt.QtGui import QIcon
 from qgis.core import QgsLayerTree, QgsLayerTreeGroup
 from qgis.core import QgsMapLayerType
 from qgis.core import QgsWkbTypes
+from.groupTypes import groupHierarchy
 
 class MainPlugin(object):
     def __init__(self, iface):
@@ -46,8 +48,16 @@ class MainPlugin(object):
             self.treeToGroup()
             self.grouped = True
 
-    def treeToGroup(self):
-        newTree = {
+    def initTreeRec(self, hierarchyDefinition, tree):
+        for (k, v) in hierarchyDefinition.items():
+            if "groupCriteria" in v:
+                tree[k] = {}
+                self.initTreeRec(v["values"], tree[k])
+            else:
+                tree[k] = []
+
+    def defaultTree(self):
+        return {
             'vector': {
                 'point': [],
                 'line': [],
@@ -58,22 +68,29 @@ class MainPlugin(object):
                 'wfs': []
             }
         }
+
+    def treeToGroup(self):
+        # newTree = self.defaultTree()
+        self.newTree = {}
+        self.initTreeRec(groupHierarchy['values'], self.newTree)
+        print(self.newTree)
         layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
         self.oldTree = layerTree.clone()
-        self.parseTreeRec(layerTree, newTree)
-        print(newTree)
+        self.parseTreeRec(layerTree)
+        #self.parseTreeRecDef(layerTree, groupHierarchy)
+        print(self.newTree)
         oldLen = len(layerTree.children())
-        vectorGroups = []
-        for (type, layers) in newTree['vector'].items():
+
+        # ll = self.treeToLayers(self.newTree)
+        # print (ll)
+        # for l in ll:
+        #     layerTree.addChildNode(l)
+        for (label, subtree) in self.newTree.items():
+            layers = self.treeToLayers(subtree)
             if layers:
-                grp = QgsLayerTreeGroup(type)
+                grp = layerTree.addGroup(label)
                 for l in layers:
-                    grp.addLayer(l)
-                vectorGroups.append(grp)
-        if vectorGroups:
-            grp = layerTree.addGroup('vector')
-            for g in vectorGroups:
-                grp.addChildNode(g)
+                    grp.addChildNode(l)
         # removes layers !!
         # iface.layerTreeCanvasBridge().rootGroup().clear()
         layerTree.removeChildren(0, oldLen)
@@ -92,29 +109,40 @@ class MainPlugin(object):
                 grp = destination.addGroup(el.name())
                 self.insertInto(el, grp)
 
-    def parseTreeRec(self, treeLeaf, into):
+    def parseTreeRec(self, treeLeaf):
         for el in treeLeaf.children():
             if QgsLayerTree.isLayer(el):
                 l = el.layer()
-                print(l.type())
-                if l.type() == QgsMapLayerType.VectorLayer:
-                    print(l.geometryType())
-                    if l.geometryType() == QgsWkbTypes.PointGeometry:
-                        into['vector']['point'].append(l)
-                    elif l.geometryType() == QgsWkbTypes.LineGeometry:
-                        into['vector']['line'].append(l)
-                    elif l.geometryType() == QgsWkbTypes.PolygonGeometry:
-                        into['vector']['polygon'].append(l)
-                    elif l.geometryType() == QgsWkbTypes.UnknownGeometry:
-                        pass
-                    elif l.geometryType() == QgsWkbTypes.NullGeometry:
-                        pass
-                    else:
-                        pass
+                self.sortInto(l, self.newTree, groupHierarchy)
             elif QgsLayerTree.isGroup(el):
-                self.parseTreeRec(el, into)
-                
-        
+                self.parseTreeRec(el)
+
+    def sortInto(self, layer, destination, definitions):
+        if "groupCriteria" in definitions:
+            groupValue = layer.__getattribute__(definitions["groupCriteria"])()
+            for (label, criteria) in definitions["values"].items():
+                if groupValue == criteria["value"]:
+                    self.sortInto(layer, destination[label], criteria)
+        else:
+            destination.append(layer)
+
+    def treeToLayers(self, sourceTree):
+        groupContents = []
+        if isinstance(sourceTree, dict):
+            for (layerType, layers) in sourceTree.items():
+                groupLayers = self.treeToLayers(layers)
+                if groupLayers:
+                    grp = QgsLayerTreeGroup(layerType)
+                    for l in layers:
+                        grp.addLayer(l)
+                    groupContents.append(grp)
+            return groupContents
+        elif isinstance(sourceTree, list):
+            return sourceTree
+        else:
+            raise Exception("Tree dictionary has been initialized incorrectly.")
+ 
+
 # for el in oldTree.children():
 #     if QgsLayerTree.isLayer(el):
 #         iface.layerTreeCanvasBridge().rootGroup().addLayer(el.layer())
