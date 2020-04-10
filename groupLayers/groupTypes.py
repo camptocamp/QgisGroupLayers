@@ -2,8 +2,6 @@ from qgis.core import QgsMapLayerType
 from qgis.core import QgsWkbTypes
 from qgis.core import QgsRasterLayer
 
-# group by providerType
-
 groupHierarchy = {
     "groupCriteria": "type",
     "values": {
@@ -51,4 +49,36 @@ groupHierarchy = {
         #     "value": QgsMapLayerType.VectorTileLayer,
         # },
     }
+}
+
+sourceHierarchy = {
+    "groupCriteria": "providerType",
+    "values": {},
+}
+
+sourceGeoHierarchy = {
+    "groupCriteria": "providerType",
+    "values": {
+        "ogr driver": {
+            "value": "ogr",
+            "groupCriteria": "type",
+            "values": {
+                "vector": {
+                    "value": QgsMapLayerType.VectorLayer,
+                    "groupCriteria": "geometryType",
+                    "values": {
+                        "polygon": {
+                            "value": QgsWkbTypes.PolygonGeometry,
+                        },
+                    },
+                },
+            }
+        },
+    },
+}
+
+groupHierarchies = {
+    "groupByType": groupHierarchy,
+    "groupBySource": sourceHierarchy,
+    "groupSrcGeo": sourceGeoHierarchy,
 }

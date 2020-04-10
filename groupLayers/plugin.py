@@ -3,7 +3,8 @@ import os
 from qgis.PyQt.QtWidgets import QAction, QDockWidget, QToolBar
 from qgis.PyQt.QtGui import QIcon
 from qgis.core import QgsLayerTree, QgsLayerTreeGroup, QgsLayerTreeLayer
-from.groupTypes import groupHierarchy
+from .groupTypes import groupHierarchies
+from .defSelector import DefSelectDialog
 
 
 class MainPlugin(object):
@@ -12,7 +13,6 @@ class MainPlugin(object):
         self.iface = iface
 
     def initGui(self):
-        # create action that will start plugin configuration
         self.action = QAction(
             QIcon(os.path.dirname(os.path.realpath(__file__)) + "/icon.png"),
             u"Group Layers by similar type",
@@ -23,10 +23,14 @@ class MainPlugin(object):
         self.action.setStatusTip("Group/ungroup layers by type")
         self.action.setCheckable(True)
         self.action.triggered.connect(self.run)
-        # the button status could be used, but it is already
+
+        # the icon pressed status could be used, but it is already
         # changed when run method is called, so this is ambiguous
         # therefore a dedicated boolean status is used
         self.grouped = False
+        self.groupAdditionalTypes = False
+        self.defSelection = groupHierarchies.keys().__iter__().__next__()
+        self.hierarchyDefinition = groupHierarchies[self.defSelection]
 
         # add toolbar button and menu item
         layersDock = self.iface.mainWindow().findChild(QDockWidget, "Layers")
@@ -36,14 +40,29 @@ class MainPlugin(object):
         # self.iface.addToolBarIcon(self.action)
         self.iface.addPluginToMenu("&Group Layers", self.action)
 
+        self.defSelector = QAction(
+            u"Select hierarchy definitions",
+            self.iface.mainWindow()
+        )
+        self.defSelector.setObjectName("defSelector")
+        self.defSelector.triggered.connect(self.selectDefs)
+        self.iface.addPluginToMenu("&Group Layers", self.defSelector)
+
     def unload(self):
         # remove the plugin menu item and icon
         self.iface.removePluginMenu("&Group Layers", self.action)
+        self.iface.removePluginMenu("&Group Layers", self.defSelector)
         self.layersToolBar.removeAction(self.action)
         # self.iface.removeToolBarIcon(self.action)
 
+    def selectDefs(self):
+        dialog = DefSelectDialog(self.defSelection)
+        if dialog.exec_():
+            self.defSelection = dialog.comboBox.currentText()
+            self.hierarchyDefinition = groupHierarchies[self.defSelection]
+            self.groupAdditionalTypes = dialog.checkBox.isChecked()
+
     def run(self):
-        # create and show a configuration dialog or something similar
         if self.grouped:
             self.groupToTree()
             self.grouped = False
@@ -61,7 +80,7 @@ class MainPlugin(object):
 
     def treeToGroup(self):
         self.newTree = {}
-        self.initTreeRec(groupHierarchy['values'], self.newTree)
+        self.initTreeRec(self.hierarchyDefinition['values'], self.newTree)
         layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
         self.oldTree = layerTree.clone()
         self.parseTreeRec(layerTree)
@@ -93,16 +112,27 @@ class MainPlugin(object):
         for el in treeLeaf.children():
             if QgsLayerTree.isLayer(el):
                 l = el.layer()
-                self.sortInto(l, self.newTree, groupHierarchy)
+                self.sortInto(l, self.newTree, self.hierarchyDefinition)
             elif QgsLayerTree.isGroup(el):
                 self.parseTreeRec(el)
 
     def sortInto(self, layer, destination, definitions):
         if "groupCriteria" in definitions:
             groupValue = layer.__getattribute__(definitions["groupCriteria"])()
+            itemFound = False
             for (label, criteria) in definitions["values"].items():
                 if groupValue == criteria["value"]:
+                    itemFound = True
                     self.sortInto(layer, destination[label], criteria)
+            if not itemFound:
+                if self.groupAdditionalTypes:
+                    groupName = "others"
+                else:
+                    groupName = str(groupValue)
+                try:
+                    destination[groupName].append(layer)
+                except KeyError:
+                    destination[groupName] = [layer]
         else:
             destination.append(layer)
 
