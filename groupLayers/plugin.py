@@ -56,7 +56,7 @@ class MainPlugin(object):
         # self.iface.removeToolBarIcon(self.action)
 
     def selectDefs(self):
-        dialog = DefSelectDialog(self.defSelection)
+        dialog = DefSelectDialog(self.defSelection, self.groupAdditionalTypes)
         if dialog.exec_():
             self.defSelection = dialog.comboBox.currentText()
             self.hierarchyDefinition = groupHierarchies[self.defSelection]

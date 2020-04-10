@@ -10,12 +10,13 @@ DEFWIDGET, DEFBASE = uic.loadUiType(os.path.join(
 
 class DefSelectDialog(DEFWIDGET, DEFBASE):
 
-    def __init__(self, selection=None):
+    def __init__(self, selection=None, groupOther=False):
         """
         Initialisation de ComplexeStringDialog
         """
         QDialog.__init__(self)
         self.setupUi(self)
+        self.checkBox.setChecked(groupOther)
         self.comboBox.addItems(groupHierarchies.keys())
         if selection and selection in groupHierarchies.keys():
             self.comboBox.setCurrentText(selection)
