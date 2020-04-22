@@ -79,16 +79,15 @@ class MainPlugin(object):
                 tree[k] = []
 
     def treeToGroup(self):
-        self.newTree = {}
-        self.initTreeRec(self.hierarchyDefinition['values'], self.newTree)
+        self.layerDict = {}
+        self.initTreeRec(self.hierarchyDefinition['values'], self.layerDict)
         layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
         self.oldTree = layerTree.clone()
-        self.parseTreeRec(layerTree)
+        self.parseTreeRec(layerTree)  # into self.layerDict
+        self.layerDict = self.cleanTree(self.layerDict)
         oldLen = len(layerTree.children())
 
-        ll = self.treeToLayers(self.newTree)
-        for l in ll:
-            layerTree.addChildNode(l)
+        self.layerDictToTree(self.layerDict, layerTree)
 
         # caution: commented instruction below removes all layers !!
         # iface.layerTreeCanvasBridge().rootGroup().clear()
@@ -99,6 +98,17 @@ class MainPlugin(object):
         oldLen = len(layerTree.children())
         self.insertInto(self.oldTree, layerTree)
         layerTree.removeChildren(0, oldLen)
+
+    def layerDictToTree(self, layerDict, destinationGroup):
+        if isinstance(layerDict, dict):
+            for (layerType, layers) in layerDict.items():
+                grp = destinationGroup.addGroup(layerType)
+                self.layerDictToTree(layers, grp)
+        elif isinstance(layerDict, list):
+            for l in layerDict:
+                destinationGroup.addLayer(l)
+        else:
+            raise Exception("Tree dictionary has been initialized incorrectly.")
 
     def insertInto(self, origin, destination):
         for el in origin.children():
@@ -112,7 +122,7 @@ class MainPlugin(object):
         for el in treeLeaf.children():
             if QgsLayerTree.isLayer(el):
                 l = el.layer()
-                self.sortInto(l, self.newTree, self.hierarchyDefinition)
+                self.sortInto(l, self.layerDict, self.hierarchyDefinition)
             elif QgsLayerTree.isGroup(el):
                 self.parseTreeRec(el)
 
@@ -136,19 +146,16 @@ class MainPlugin(object):
         else:
             destination.append(layer)
 
-    def treeToLayers(self, sourceTree):
+    def cleanTree(self, sourceTree):
+        # remove all branches without end leaves
         if isinstance(sourceTree, dict):
-            groupContents = []
+            groupContents = {}
             for (layerType, layers) in sourceTree.items():
-                groupLayers = self.treeToLayers(layers)
+                groupLayers = self.cleanTree(layers)
                 if groupLayers:
-                    grp = QgsLayerTreeGroup(layerType)
-                    for l in groupLayers:
-                        grp.addChildNode(l)
-                    groupContents.append(grp)
+                    groupContents[layerType] = groupLayers
             return groupContents
         elif isinstance(sourceTree, list):
-            return [QgsLayerTreeLayer(l) for l in sourceTree]
+            return sourceTree
         else:
             raise Exception("Tree dictionary has been initialized incorrectly.")
- 
