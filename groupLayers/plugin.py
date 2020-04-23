@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
-from qgis.PyQt.QtWidgets import QAction, QDockWidget, QToolBar
+from qgis.PyQt.QtWidgets import QAction, QDockWidget, QToolBar, QToolButton, QMenu
 from qgis.PyQt.QtGui import QIcon
-from qgis.core import QgsLayerTree, QgsLayerTreeGroup, QgsLayerTreeLayer
+from qgis.core import QgsLayerTree, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsProject
 from .groupTypes import groupHierarchies
 from .defSelector import DefSelectDialog
 
@@ -15,7 +15,7 @@ class MainPlugin(object):
     def initGui(self):
         self.action = QAction(
             QIcon(os.path.dirname(os.path.realpath(__file__)) + "/icon.png"),
-            u"Group Layers by similar type",
+            u"Group Layers by similar type (keep visibility)",
             self.iface.mainWindow()
         )
         self.action.setObjectName("groupAction")
@@ -23,6 +23,9 @@ class MainPlugin(object):
         self.action.setStatusTip("Group/ungroup layers by type")
         self.action.setCheckable(True)
         self.action.triggered.connect(self.run)
+
+        self.resetAction = QAction("Group and make all layers visible")
+        self.resetAction.triggered.connect(self.run_reset_visibility)
 
         # the icon pressed status could be used, but it is already
         # changed when run method is called, so this is ambiguous
@@ -37,6 +40,14 @@ class MainPlugin(object):
         self.layersToolBar = layersDock.widget().layout().itemAt(0).widget()
         assert isinstance(self.layersToolBar, QToolBar)
         self.layersToolBar.addAction(self.action)
+        self.menuButton = [btn for btn in self.layersToolBar.children()
+                           if isinstance(btn, QToolButton)
+                           if self.action in btn.actions()][0]
+        self.buttonMenu = QMenu()
+        self.menuButton.setMenu(self.buttonMenu)
+        self.menuButton.setPopupMode(QToolButton.MenuButtonPopup)
+        self.buttonMenu.addAction(self.action)
+        self.buttonMenu.addAction(self.resetAction)
         # self.iface.addToolBarIcon(self.action)
         self.iface.addPluginToMenu("&Group Layers", self.action)
 
@@ -62,13 +73,19 @@ class MainPlugin(object):
             self.hierarchyDefinition = groupHierarchies[self.defSelection]
             self.groupAdditionalTypes = dialog.checkBox.isChecked()
 
-    def run(self):
+    def run(self, checked=False, reset=False):
         if self.grouped:
-            self.groupToTree()
+            self.groupToTree(reset_initial_visibility=reset)
             self.grouped = False
+            self.resetAction.setText("Group and make all layers visible")
         else:
-            self.treeToGroup()
+            self.treeToGroup(all_visible=reset)
             self.grouped = True
+            self.resetAction.setText("Ungroup and restore initial (ungrouped) visibility")
+
+    def run_reset_visibility(self):
+        self.action.toggle()
+        self.run(reset=True)
 
     def initTreeRec(self, hierarchyDefinition, tree):
         for (k, v) in hierarchyDefinition.items():
@@ -78,45 +95,56 @@ class MainPlugin(object):
             else:
                 tree[k] = []
 
-    def treeToGroup(self):
+    def treeToGroup(self, all_visible=True):
         self.layerDict = {}
+        self.treeRoot = QgsProject.instance().layerTreeRoot()
         self.initTreeRec(self.hierarchyDefinition['values'], self.layerDict)
         layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
         self.oldTree = layerTree.clone()
         self.parseTreeRec(layerTree)  # into self.layerDict
         self.layerDict = self.cleanTree(self.layerDict)
         oldLen = len(layerTree.children())
-
-        self.layerDictToTree(self.layerDict, layerTree)
+        self.layerDictToTree(self.layerDict, layerTree, all_visible)
 
         # caution: commented instruction below removes all layers !!
         # iface.layerTreeCanvasBridge().rootGroup().clear()
         layerTree.removeChildren(0, oldLen)
 
-    def groupToTree(self):
+    def groupToTree(self, reset_initial_visibility=True):
+        self.treeRoot = QgsProject.instance().layerTreeRoot()
         layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
         oldLen = len(layerTree.children())
-        self.insertInto(self.oldTree, layerTree)
+        self.insertInto(self.oldTree, layerTree, reset_initial_visibility)
         layerTree.removeChildren(0, oldLen)
 
-    def layerDictToTree(self, layerDict, destinationGroup):
+    def layerDictToTree(self, layerDict, destinationGroup, all_visible):
         if isinstance(layerDict, dict):
             for (layerType, layers) in layerDict.items():
                 grp = destinationGroup.addGroup(layerType)
-                self.layerDictToTree(layers, grp)
+                self.layerDictToTree(layers, grp, all_visible)
         elif isinstance(layerDict, list):
             for l in layerDict:
-                destinationGroup.addLayer(l)
+                isVisible = self.treeRoot.findLayer(l).isVisible()
+                node = destinationGroup.addLayer(l)
+                if not all_visible:
+                    node.setItemVisibilityChecked(isVisible)
+
         else:
             raise Exception("Tree dictionary has been initialized incorrectly.")
 
-    def insertInto(self, origin, destination):
+    def insertInto(self, origin, destination, reset_initial_visibility):
         for el in origin.children():
             if QgsLayerTree.isLayer(el):
-                destination.addLayer(el.layer())
+                node = destination.addLayer(el.layer())
+                node.setItemVisibilityChecked(
+                    self.treeRoot.findLayer(el.layer()).isVisible()
+                )
             elif QgsLayerTree.isGroup(el):
-                grp = destination.addGroup(el.name())
-                self.insertInto(el, grp)
+                node = destination.addGroup(el.name())
+                self.insertInto(el, node, reset_initial_visibility)
+            if reset_initial_visibility:
+                # overwrite visibility with previously saved visibility
+                node.setItemVisibilityChecked(el.itemVisibilityChecked())
 
     def parseTreeRec(self, treeLeaf):
         for el in treeLeaf.children():
