@@ -11,6 +11,7 @@ class MainPlugin(object):
     def __init__(self, iface):
         self.name = "groupLayers"
         self.iface = iface
+        self.project = QgsProject.instance()
 
     def initGui(self):
         self.action = QAction(
@@ -58,12 +59,16 @@ class MainPlugin(object):
         self.defSelector.setObjectName("defSelector")
         self.defSelector.triggered.connect(self.selectDefs)
         self.iface.addPluginToMenu("&Group Layers", self.defSelector)
+        # connect hook to reset the plugin state
+        # when a new or existing project is opened
+        self.project.cleared.connect(self.reset_state)
 
     def unload(self):
         # remove the plugin menu item and icon
         self.iface.removePluginMenu("&Group Layers", self.action)
         self.iface.removePluginMenu("&Group Layers", self.defSelector)
         self.layersToolBar.removeAction(self.action)
+        self.project.cleared.disconnect(self.reset_state)
         # self.iface.removeToolBarIcon(self.action)
 
     def selectDefs(self):
@@ -74,18 +79,25 @@ class MainPlugin(object):
             self.groupAdditionalTypes = dialog.checkBox.isChecked()
 
     def run(self, checked=False, reset=False):
-        if self.grouped:
-            self.groupToTree(reset_initial_visibility=reset)
-            self.grouped = False
-            self.resetAction.setText("Group and make all layers visible")
-        else:
-            self.treeToGroup(all_visible=reset)
-            self.grouped = True
-            self.resetAction.setText("Ungroup and restore initial (ungrouped) visibility")
+        try:
+            if self.grouped:
+                self.groupToTree(reset_initial_visibility=reset)
+                self.resetAction.setText("Group and make all layers visible")
+            else:
+                self.treeToGroup(all_visible=reset)
+                self.resetAction.setText("Ungroup and restore initial (ungrouped) visibility")
+        except Exception as e:
+            self.grouped = checked
+            raise(e)
+        self.grouped = checked
 
     def run_reset_visibility(self):
         self.action.toggle()
         self.run(reset=True)
+
+    def reset_state(self):
+        self.action.setChecked(False)
+        self.grouped = False
 
     def initTreeRec(self, hierarchyDefinition, tree):
         for (k, v) in hierarchyDefinition.items():
@@ -97,7 +109,7 @@ class MainPlugin(object):
 
     def treeToGroup(self, all_visible=True):
         self.layerDict = {}
-        self.treeRoot = QgsProject.instance().layerTreeRoot()
+        self.treeRoot = self.project.layerTreeRoot()
         self.initTreeRec(self.hierarchyDefinition['values'], self.layerDict)
         layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
         self.oldTree = layerTree.clone()
@@ -111,7 +123,7 @@ class MainPlugin(object):
         layerTree.removeChildren(0, oldLen)
 
     def groupToTree(self, reset_initial_visibility=True):
-        self.treeRoot = QgsProject.instance().layerTreeRoot()
+        self.treeRoot = self.project.layerTreeRoot()
         layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
         oldLen = len(layerTree.children())
         self.insertInto(self.oldTree, layerTree, reset_initial_visibility)
