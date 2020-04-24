@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
-from qgis.PyQt.QtWidgets import QAction, QDockWidget, QToolBar, QToolButton, QMenu
+from qgis.PyQt.QtWidgets import QAction, QDockWidget, QToolBar, QToolButton, QMenu, QMessageBox
 from qgis.PyQt.QtGui import QIcon
-from qgis.core import QgsLayerTree, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsProject
+from qgis.core import QgsLayerTree, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsProject, Qgis
 from .groupTypes import groupHierarchies
 from .defSelector import DefSelectDialog
 
@@ -12,6 +12,7 @@ class MainPlugin(object):
         self.name = "groupLayers"
         self.iface = iface
         self.project = QgsProject.instance()
+        self.treeBeforeSave = None
 
     def initGui(self):
         self.action = QAction(
@@ -62,6 +63,8 @@ class MainPlugin(object):
         # connect hook to reset the plugin state
         # when a new or existing project is opened
         self.project.cleared.connect(self.reset_state)
+        self.project.writeProject.connect(self.write)
+        self.project.projectSaved.connect(self.saved)
 
     def unload(self):
         # remove the plugin menu item and icon
@@ -69,6 +72,8 @@ class MainPlugin(object):
         self.iface.removePluginMenu("&Group Layers", self.defSelector)
         self.layersToolBar.removeAction(self.action)
         self.project.cleared.disconnect(self.reset_state)
+        self.project.writeProject.disconnect(self.write)
+        self.project.projectSaved.disconnect(self.saved)
         # self.iface.removeToolBarIcon(self.action)
 
     def selectDefs(self):
@@ -98,6 +103,31 @@ class MainPlugin(object):
     def reset_state(self):
         self.action.setChecked(False)
         self.grouped = False
+
+    def write(self):
+        if self.grouped:
+            answer = QMessageBox.question(self.iface.mainWindow(),
+                                          "Save ungrouped state",
+                                          "The layers are currently grouped by the "
+                                          "groupLayers plugin\n\n"
+                                          "Would you like to save the initial (ungrouped) state?\n"
+                                          "(save current (grouped) layer tree if answer = NO)",
+                                          QMessageBox.Yes|QMessageBox.No)
+            if answer == QMessageBox.Yes:
+                self.treeBeforeSave = self.iface.layerTreeCanvasBridge().rootGroup().clone()
+                self.groupToTree(reset_initial_visibility=True)
+                self.iface.messageBar().pushMessage(
+                    'CAUTION: The layer tree has been saved in its original format, '
+                    'check options if you want to change this behavior.', Qgis.Info
+                )
+
+    def saved(self):
+        if self.treeBeforeSave is not None:
+            tempOldTree = self.oldTree
+            self.oldTree = self.treeBeforeSave
+            self.groupToTree(reset_initial_visibility=True)
+            self.oldTree = tempOldTree
+        self.treeBeforeSave = None
 
     def initTreeRec(self, hierarchyDefinition, tree):
         for (k, v) in hierarchyDefinition.items():
