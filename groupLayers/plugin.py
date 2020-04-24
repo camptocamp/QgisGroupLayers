@@ -74,6 +74,14 @@ class MainPlugin(object):
         self.project.cleared.disconnect(self.reset_state)
         self.project.writeProject.disconnect(self.write)
         self.project.projectSaved.disconnect(self.saved)
+        try:
+            self.project.layerWasAdded.disconnect(self.add_layer_sync)
+        except Exception:
+            print('could not disconnect add_layer_sync in unload')
+        try:
+            self.project.layerRemoved.disconnect(self.remove_layer_sync)
+        except Exception:
+            print('could not disconnect remove_layer_sync in unload')
         # self.iface.removeToolBarIcon(self.action)
 
     def selectDefs(self):
@@ -86,19 +94,30 @@ class MainPlugin(object):
     def run(self, checked=False, reset=False):
         try:
             if self.grouped:
+                try:
+                    self.project.layerWasAdded.disconnect(self.add_layer_sync)
+                except Exception:
+                    print('could not disconnect add_layer_sync')
+                try:
+                    self.project.layerRemoved.disconnect(self.remove_layer_sync)
+                except Exception:
+                    print('could not disconnect remove_layer_sync')
                 self.groupToTree(reset_initial_visibility=reset)
                 self.resetAction.setText("Group and make all layers visible")
             else:
                 self.treeToGroup(all_visible=reset)
                 self.resetAction.setText("Ungroup and restore initial (ungrouped) visibility")
+                self.project.layerWasAdded.connect(self.add_layer_sync)
+                self.project.layerRemoved.connect(self.remove_layer_sync)
         except Exception as e:
-            self.grouped = checked
             raise(e)
-        self.grouped = checked
+        finally:
+            # synchronize plugin state with button state in case of exceptions
+            self.grouped = checked
 
     def run_reset_visibility(self):
         self.action.toggle()
-        self.run(reset=True)
+        self.run(checked=self.action.isChecked(), reset=True)
 
     def reset_state(self):
         self.action.setChecked(False)
@@ -128,6 +147,18 @@ class MainPlugin(object):
             self.groupToTree(reset_initial_visibility=True)
             self.oldTree = tempOldTree
         self.treeBeforeSave = None
+
+    def add_layer_sync(self, addedLayer):
+        self.oldTree.addLayer(addedLayer)
+
+    def remove_layer_sync(self, removedLayerId):
+        removedLayer = self.oldTree.findLayer(removedLayerId)
+        self.recursiveRemoveFromGroup(self.oldTree, removedLayer)
+
+    def recursiveRemoveFromGroup(self, group, layer):
+        group.removeChildNode(layer)
+        for subGroup in group.findGroups():
+            self.recursiveRemoveFromGroup(subGroup, layer)
 
     def initTreeRec(self, hierarchyDefinition, tree):
         for (k, v) in hierarchyDefinition.items():
