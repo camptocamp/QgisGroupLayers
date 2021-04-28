@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
-import sip
 from qgis.PyQt.QtWidgets import QAction, QDockWidget, QToolBar, QToolButton, QMenu, QMessageBox
 from qgis.PyQt.QtGui import QIcon
-from qgis.core import QgsLayerTree, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsProject, Qgis
+from qgis.core import QgsLayerTree, QgsProject, Qgis
 from .groupTypes import groupHierarchies
 from .defSelector import DefSelectDialog
 
@@ -133,7 +132,7 @@ class MainPlugin(object):
                                           "groupLayers plugin\n\n"
                                           "Would you like to save the initial (ungrouped) state?\n"
                                           "(save current (grouped) layer tree if answer = NO)",
-                                          QMessageBox.Yes|QMessageBox.No)
+                                          QMessageBox.Yes | QMessageBox.No)
             if answer == QMessageBox.Yes:
                 self.treeBeforeSave = self.iface.layerTreeCanvasBridge().rootGroup().clone()
                 self.groupToTree(reset_initial_visibility=True)
@@ -154,25 +153,16 @@ class MainPlugin(object):
         self.oldTree.addLayer(addedLayer)
 
     def remove_layer_sync(self, removedLayerId):
-        print('coucou')
         removedLayer = self.oldTree.findLayer(removedLayerId)
         try:
             self.recursiveRemoveFromGroup(self.oldTree, removedLayer)
-            print(f'removed layer {removedLayerId}')
         except:
-            print(f'could not remove layer {removedLayerId}')
+            print(f'could not remove layer {removedLayerId} - already removed')
 
     def recursiveRemoveFromGroup(self, group, layer):
-        if not sip.isdeleted(group):
-            group.removeChildNode(layer)
-            for subGroup in group.findGroups():
-                if not sip.isdeleted(layer):
-                    self.recursiveRemoveFromGroup(subGroup, layer)
-                    print(f'deleted {layer}')
-                else:
-                    print(f'layer {layer} non-existant')
-        else:
-            print(f'group {group} non-existant')
+        group.removeChildNode(layer)
+        for subGroup in group.findGroups():
+            self.recursiveRemoveFromGroup(subGroup, layer)
 
     def initTreeRec(self, hierarchyDefinition, tree):
         for (k, v) in hierarchyDefinition.items():
