@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import sip
 from qgis.PyQt.QtWidgets import QAction, QDockWidget, QToolBar, QToolButton, QMenu, QMessageBox
 from qgis.PyQt.QtGui import QIcon
 from qgis.core import QgsLayerTree, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsProject, Qgis
@@ -92,6 +93,7 @@ class MainPlugin(object):
             self.groupAdditionalTypes = dialog.checkBox.isChecked()
 
     def run(self, checked=False, reset=False):
+        print('toggle')
         try:
             if self.grouped:
                 try:
@@ -152,13 +154,25 @@ class MainPlugin(object):
         self.oldTree.addLayer(addedLayer)
 
     def remove_layer_sync(self, removedLayerId):
+        print('coucou')
         removedLayer = self.oldTree.findLayer(removedLayerId)
-        self.recursiveRemoveFromGroup(self.oldTree, removedLayer)
+        try:
+            self.recursiveRemoveFromGroup(self.oldTree, removedLayer)
+            print(f'removed layer {removedLayerId}')
+        except:
+            print(f'could not remove layer {removedLayerId}')
 
     def recursiveRemoveFromGroup(self, group, layer):
-        group.removeChildNode(layer)
-        for subGroup in group.findGroups():
-            self.recursiveRemoveFromGroup(subGroup, layer)
+        if not sip.isdeleted(group):
+            group.removeChildNode(layer)
+            for subGroup in group.findGroups():
+                if not sip.isdeleted(layer):
+                    self.recursiveRemoveFromGroup(subGroup, layer)
+                    print(f'deleted {layer}')
+                else:
+                    print(f'layer {layer} non-existant')
+        else:
+            print(f'group {group} non-existant')
 
     def initTreeRec(self, hierarchyDefinition, tree):
         for (k, v) in hierarchyDefinition.items():
