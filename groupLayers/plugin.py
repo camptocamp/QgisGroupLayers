@@ -2,7 +2,7 @@
 import os
 from qgis.PyQt.QtWidgets import QAction, QDockWidget, QToolBar, QToolButton, QMenu, QMessageBox
 from qgis.PyQt.QtGui import QIcon
-from qgis.core import QgsLayerTree, QgsProject, Qgis
+from qgis.core import QgsLayerTree, QgsProject, Qgis, QgsReadWriteContext
 from .groupTypes import groupHierarchies
 from .defSelector import DefSelectDialog
 
@@ -68,6 +68,7 @@ class MainPlugin(object):
 
     def unload(self):
         # remove the plugin menu item and icon
+        self.run(checked=False)
         self.iface.removePluginMenu("&Group Layers", self.action)
         self.iface.removePluginMenu("&Group Layers", self.defSelector)
         self.layersToolBar.removeAction(self.action)
@@ -92,9 +93,8 @@ class MainPlugin(object):
             self.groupAdditionalTypes = dialog.checkBox.isChecked()
 
     def run(self, checked=False, reset=False):
-        print('toggle')
         try:
-            if self.grouped:
+            if self.grouped and not checked:
                 try:
                     self.project.layerWasAdded.disconnect(self.add_layer_sync)
                 except Exception:
@@ -105,11 +105,13 @@ class MainPlugin(object):
                     print('could not disconnect remove_layer_sync')
                 self.groupToTree(reset_initial_visibility=reset)
                 self.resetAction.setText("Group and make all layers visible")
-            else:
+            elif not self.grouped and checked:
                 self.treeToGroup(all_visible=reset)
                 self.resetAction.setText("Ungroup and restore initial (ungrouped) visibility")
                 self.project.layerWasAdded.connect(self.add_layer_sync)
                 self.project.layerRemoved.connect(self.remove_layer_sync)
+            else:
+                self.grouped = checked
         except Exception as e:
             raise(e)
         finally:
@@ -124,7 +126,7 @@ class MainPlugin(object):
         self.action.setChecked(False)
         self.grouped = False
 
-    def write(self):
+    def write(self, doc):
         if self.grouped:
             answer = QMessageBox.question(self.iface.mainWindow(),
                                           "Save ungrouped state",
@@ -140,12 +142,19 @@ class MainPlugin(object):
                     'CAUTION: The layer tree has been saved in its original format, '
                     'check options if you want to change this behavior.', Qgis.Info
                 )
+                # workaround since QGIS writes the layer tree before calling the writeProject hook
+                qgisNode = doc.documentElement()
+                el_new = doc.createElement('myLayerTree')
+                self.treeRoot.writeXml(el_new, QgsReadWriteContext())
+                new_tree_node = el_new.firstChild()
+                tree_node = qgisNode.elementsByTagName('layer-tree-group').item(0)
+                qgisNode.replaceChild(new_tree_node, tree_node)
 
     def saved(self):
         if self.treeBeforeSave is not None:
             tempOldTree = self.oldTree
             self.oldTree = self.treeBeforeSave
-            self.groupToTree(reset_initial_visibility=True)
+            self.treeToGroup(all_visible=False)
             self.oldTree = tempOldTree
         self.treeBeforeSave = None
 

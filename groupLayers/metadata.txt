@@ -1,10 +1,15 @@
 [general]
 name=groupLayers
+about=Quickly toggle between grouping of layers by type and project tree.
 experimental=False
 description=Group Layers by Type
-version=0.1
-releasedate=2020-04-09
+version=0.2
+releasedate=2025-09-09
 qgisMinimumVersion=3.0
-author=Moritz KIRMSE
+author=Moritz KIRMSE (camptocamp)
 email=moritz.kirmse@camptocamp.com
 icon=icon.png
+
+homepage=https://github.com/camptocamp/QgisGroupLayers
+tracker=https://github.com/camptocamp/QgisGroupLayers/issues
+repository=https://github.com/camptocamp/QgisGroupLayers
