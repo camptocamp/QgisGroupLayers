@@ -34,3 +34,21 @@ Each of these sets is itself a recursive tree defining the grouping rules:
 - The criterion method must exist for the given layer type.
   - _example_: `layer.geometryType()` only exists for vector layers, so this criterion must be used below a grouping by layer type (`layer.type()`) and only inside the value `QgsMapLayerType.VectorLayer`
   
+
+# Development
+## Release of a new version on QGIS repo
+
+Update metadata.txt
+```
+make package
+```
+Upload zip file from dist folder
+
+## Release of a new version on c2c repo
+
+- Set S3 credentials
+- Install `qgis-plugins.xml` python package (in virtualenv if desired)
+
+```
+make -f c2c.mk upload
+```
